@@ -1,0 +1,36 @@
+{
+  "name": "jots-event-logger",
+  "version": "1.0.0",
+  "description": "An Obsidian plugin for event logging and management.",
+  "main": "dist/main.js",
+  "type": "module",
+  "scripts": {
+    "clean": "if exist dist rmdir /s /q dist",
+    "build": "rollup -c",
+    "prepare": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "event",
+    "logger"
+  ],
+  "author": "Joseph Fieber",
+  "license": "MIT",
+  "dependencies": {
+    "moment": "^2.30.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@types/moment": "^2.11.29",
+    "@types/node": "^22.13.16",
+    "obsidian": "^1.8.7",
+    "rollup": "^4.38.0",
+    "rollup-plugin-typescript2": "^0.36.0",
+    "ts-loader": "^9.2.6",
+    "typescript": "^4.5.4",
+    "webpack": "^5.64.0",
+    "webpack-cli": "^4.9.1"
+  }
+}
