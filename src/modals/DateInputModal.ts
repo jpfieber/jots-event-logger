@@ -23,7 +23,10 @@ export default class DateInputModal extends Modal {
         const dateTimeContainer = contentEl.createEl('div');
         dateTimeContainer.addClass('modal-datetime-container');
 
-        const dateContainer = this.createDateTimeContainer(dateTimeContainer, 'Event date', 'date', new Date().toISOString().split('T')[0]);
+        // Get the local date in YYYY-MM-DD format
+        const localDate = this.getLocalDate();
+        const dateContainer = this.createDateTimeContainer(dateTimeContainer, 'Event date', 'date', localDate);
+
         const startTimeContainer = this.createDateTimeContainer(dateTimeContainer, 'Start time', 'time', '00:00');
         const endTimeContainer = this.createDateTimeContainer(dateTimeContainer, 'End time', 'time', '00:00');
 
@@ -41,6 +44,14 @@ export default class DateInputModal extends Modal {
             this.onSubmit({ description, inputDate, eventType, icon, startTime, endTime, journalPrefix });
             this.close();
         };
+    }
+
+    private getLocalDate(): string {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
     private createLabel(container: HTMLElement, text: string) {

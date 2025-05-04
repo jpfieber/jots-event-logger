@@ -148,13 +148,16 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
                         });
                 });
 
-            // Icon Setting
+            // Icon Setting (Dropdown)
             new Setting(settingRow)
                 .setName('Icon')
-                .addText(text => {
-                    text
-                        .setPlaceholder('Enter icon')
-                        .setValue(eventType.icon || '')
+                .addDropdown(dropdown => {
+                    const iconOptions = this.plugin.settings.iconOptions.split(','); // Split Icon Options into an array
+                    iconOptions.forEach(icon => {
+                        dropdown.addOption(icon, icon); // Add each icon as an option
+                    });
+                    dropdown
+                        .setValue(eventType.icon || '') // Set the current value
                         .onChange(async (value) => {
                             this.plugin.settings.eventTypes[index].icon = value;
                             await this.plugin.saveSettings();
@@ -164,8 +167,9 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
             // Up, Down, and Remove Buttons
             new Setting(settingRow)
                 .addButton(button => button
-                    .setButtonText('Up')
+                    .setIcon("arrow-up") // Up arrow
                     .setCta()
+                    .setTooltip('Move Up')
                     .onClick(async () => {
                         if (index > 0) {
                             const temp = this.plugin.settings.eventTypes[index - 1];
@@ -176,8 +180,9 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
                         }
                     }))
                 .addButton(button => button
-                    .setButtonText('Down')
+                    .setIcon("arrow-down") // Down arrow
                     .setCta()
+                    .setTooltip('Move Down')
                     .onClick(async () => {
                         if (index < this.plugin.settings.eventTypes.length - 1) {
                             const temp = this.plugin.settings.eventTypes[index + 1];
@@ -188,14 +193,15 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
                         }
                     }))
                 .addButton(button => button
-                    .setButtonText('Remove')
+                    .setIcon("trash") // Trash can
                     .setCta()
+                    .setTooltip('Remove')
                     .onClick(async () => {
                         this.plugin.settings.eventTypes.splice(index, 1);
                         await this.plugin.saveSettings();
                         this.display();
                     }));
-        });
+           });
 
         // Add Event Type Button
         new Setting(containerEl)
@@ -210,7 +216,6 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
 
         this.addWebsiteSection(containerEl);
         this.addCoffeeSection(containerEl);
-    
     }
 
     private addWebsiteSection(containerEl: HTMLElement) {
@@ -221,7 +226,7 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
         websiteDiv.style.marginBottom = '20px';
         websiteDiv.style.padding = '0.5rem';
         websiteDiv.style.opacity = '0.75';
-    
+
         const logoLink = websiteDiv.createEl('a', {
             href: 'https://jots.life',
         });
@@ -235,9 +240,9 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
         logoImg.style.width = '64px';
         logoImg.style.height = '64px';
         logoImg.style.marginRight = '15px';
-    
+
         websiteDiv.appendChild(logoLink);
-    
+
         const descriptionDiv = websiteDiv.createEl('div', { cls: 'website-description' });
         descriptionDiv.innerHTML = `
             While Event Logger works on its own, it is part of a system called 
@@ -247,7 +252,7 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
         descriptionDiv.style.fontSize = '14px';
         descriptionDiv.style.lineHeight = '1.5';
         descriptionDiv.style.color = '#555';
-    
+
         websiteDiv.appendChild(descriptionDiv);
         containerEl.appendChild(websiteDiv);
     }
@@ -269,5 +274,4 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
 
         containerEl.appendChild(coffeeDiv);
     }
-
 }

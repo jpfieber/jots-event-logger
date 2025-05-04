@@ -19,7 +19,9 @@ class DateInputModal extends obsidian.Modal {
         const descriptionEl = this.createInput(contentEl, 'text', 'Describe the event');
         const dateTimeContainer = contentEl.createEl('div');
         dateTimeContainer.addClass('modal-datetime-container');
-        const dateContainer = this.createDateTimeContainer(dateTimeContainer, 'Event date', 'date', new Date().toISOString().split('T')[0]);
+        // Get the local date in YYYY-MM-DD format
+        const localDate = this.getLocalDate();
+        const dateContainer = this.createDateTimeContainer(dateTimeContainer, 'Event date', 'date', localDate);
         const startTimeContainer = this.createDateTimeContainer(dateTimeContainer, 'Start time', 'time', '00:00');
         const endTimeContainer = this.createDateTimeContainer(dateTimeContainer, 'End time', 'time', '00:00');
         const submitButton = contentEl.createEl('button', { text: 'Submit' });
@@ -36,6 +38,13 @@ class DateInputModal extends obsidian.Modal {
             this.onSubmit({ description, inputDate, eventType, icon, startTime, endTime, journalPrefix });
             this.close();
         };
+    }
+    getLocalDate() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
     createLabel(container, text) {
         container.createEl('label', { text }).addClass('modal-label');
@@ -267,13 +276,16 @@ class EventLoggerSettingTab extends obsidian.PluginSettingTab {
                     await this.plugin.saveSettings();
                 });
             });
-            // Icon Setting
+            // Icon Setting (Dropdown)
             new obsidian.Setting(settingRow)
                 .setName('Icon')
-                .addText(text => {
-                text
-                    .setPlaceholder('Enter icon')
-                    .setValue(eventType.icon || '')
+                .addDropdown(dropdown => {
+                const iconOptions = this.plugin.settings.iconOptions.split(','); // Split Icon Options into an array
+                iconOptions.forEach(icon => {
+                    dropdown.addOption(icon, icon); // Add each icon as an option
+                });
+                dropdown
+                    .setValue(eventType.icon || '') // Set the current value
                     .onChange(async (value) => {
                     this.plugin.settings.eventTypes[index].icon = value;
                     await this.plugin.saveSettings();
@@ -282,8 +294,9 @@ class EventLoggerSettingTab extends obsidian.PluginSettingTab {
             // Up, Down, and Remove Buttons
             new obsidian.Setting(settingRow)
                 .addButton(button => button
-                .setButtonText('Up')
+                .setIcon("arrow-up") // Up arrow
                 .setCta()
+                .setTooltip('Move Up')
                 .onClick(async () => {
                 if (index > 0) {
                     const temp = this.plugin.settings.eventTypes[index - 1];
@@ -294,8 +307,9 @@ class EventLoggerSettingTab extends obsidian.PluginSettingTab {
                 }
             }))
                 .addButton(button => button
-                .setButtonText('Down')
+                .setIcon("arrow-down") // Down arrow
                 .setCta()
+                .setTooltip('Move Down')
                 .onClick(async () => {
                 if (index < this.plugin.settings.eventTypes.length - 1) {
                     const temp = this.plugin.settings.eventTypes[index + 1];
@@ -306,8 +320,9 @@ class EventLoggerSettingTab extends obsidian.PluginSettingTab {
                 }
             }))
                 .addButton(button => button
-                .setButtonText('Remove')
+                .setIcon("trash") // Trash can
                 .setCta()
+                .setTooltip('Remove')
                 .onClick(async () => {
                 this.plugin.settings.eventTypes.splice(index, 1);
                 await this.plugin.saveSettings();
@@ -6097,19 +6112,17 @@ class EventLoggerPlugin extends obsidian.Plugin {
         console.log('Event Logger: Loading plugin');
         await this.loadSettings();
         this.addSettingTab(new EventLoggerSettingTab(this.app, this));
+        // Command to create an event with a file
         this.addCommand({
             id: 'create-event-with-file',
             name: 'Create Event in Journal with File',
-            callback: () => this.showByDate(true)
+            callback: () => this.showByDate(true) // Calls showByDate with createEventFile = true
         });
+        // Command to create an event in the journal only
         this.addCommand({
             id: 'open-date-input-modal',
-            name: 'Open Date Input Modal',
-            callback: () => {
-                new DateInputModal(this.app, (data) => {
-                    console.log(data);
-                }, this.settings).open();
-            },
+            name: 'Create Event in Journal',
+            callback: () => this.showJournalOnly() // Calls showJournalOnly
         });
         this.injectCSS();
     }
@@ -6167,9 +6180,10 @@ class EventLoggerPlugin extends obsidian.Plugin {
             if (description && inputDate && eventType && icon && startTime && endTime) {
                 const eventTypeObj = this.settings.eventTypes.find(option => option.display === eventType);
                 const prefix = eventTypeObj ? eventTypeObj.prefix : '';
-                const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: [[${moment(inputDate).format('YYYYMMDD')} - ${prefix} -- ${description}|${description}]])`;
+                const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: [[${moment(inputDate).local().format('YYYYMMDD')} - ${prefix ? `${prefix} -- ` : ''}${description}|${description}]])`;
                 await this.addToJournal(inputDate, formattedString);
                 if (createEventFile) {
+                    console.log('Event Logger: Creating event file...');
                     await this.createEventFile(inputDate, eventType, description, startTime, endTime, prefix);
                 }
             }
@@ -6180,7 +6194,7 @@ class EventLoggerPlugin extends obsidian.Plugin {
         new JournalOnlyModal(this.app, async ({ description, inputDate, icon, startTime, journalPrefix }) => {
             if (description && inputDate && icon && startTime) {
                 const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: ${description})`;
-                await this.addToJournal(inputDate, formattedString);
+                await this.addToJournal(moment(inputDate).local().format('YYYY-MM-DD'), formattedString);
             }
         }, this.settings).open();
     }
@@ -6198,9 +6212,12 @@ class EventLoggerPlugin extends obsidian.Plugin {
         }
     }
     async createEventFile(inputDate, eventType, description, startTime, endTime, prefix) {
-        const formattedEventDate = moment(inputDate).format(this.settings.eventNameFormat);
-        const eventFileName = `${formattedEventDate} - ${prefix} -- ${description}.md`;
-        const eventFilePath = `${this.settings.eventFolder}/${eventFileName}`;
+        console.log('Event Logger: Starting to create event file...');
+        const year = moment(inputDate).format('YYYY'); // Extract year
+        const yearMonth = moment(inputDate).format('YYYY-MM'); // Extract year and month
+        const eventFileName = `${moment(inputDate).format('YYYYMMDD')} - ${prefix ? `${prefix} -- ` : ''}${description}.md`;
+        const eventFilePath = `${this.settings.eventFolder}/${year}/${yearMonth}/${eventFileName}`; // Correct folder structure
+        const folderPath = eventFilePath.substring(0, eventFilePath.lastIndexOf('/')); // Extract folder path
         const currentDatedTime = this.getCurrentDateTime();
         const eventFileContent = `---\n
 type: ${eventType.toLowerCase().replace(/\s+/g, '').replace(/'/g, '')}\n
@@ -6210,14 +6227,34 @@ endTime: ${endTime}\n
 date: ${inputDate}\n
 fileClass: Events\n
 created: ${currentDatedTime}\n
-filename: ${moment(inputDate).format('YYYYMMDD')} - ${prefix} -- ${description}\n
+filename: ${moment(inputDate).format('YYYYMMDD')} - ${prefix ? `${prefix} -- ` : ''}${description}\n
 attendees: \n
 place: \n
 documents: \n
 ---\n\n
 # ${moment(inputDate).format('YYYYMMDD')} - ${description}`;
-        await this.app.vault.create(eventFilePath, eventFileContent);
-        console.log(`Event Logger: Event file created at: ${eventFilePath}`);
+        // Ensure the folder structure exists
+        await this.createFolderRecursively(folderPath);
+        // Create the file
+        try {
+            await this.app.vault.create(eventFilePath, eventFileContent);
+            console.log(`Event Logger: Event file successfully created at: ${eventFilePath}`);
+        }
+        catch (error) {
+            console.error(`Event Logger: Failed to create event file. Error: ${error instanceof Error ? error.message : error}`);
+        }
+    }
+    async createFolderRecursively(folderPath) {
+        const parts = folderPath.split('/');
+        let currentPath = '';
+        for (const part of parts) {
+            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            const folder = this.app.vault.getAbstractFileByPath(currentPath);
+            if (!folder) {
+                console.log(`Event Logger: Creating folder at ${currentPath}`);
+                await this.app.vault.createFolder(currentPath);
+            }
+        }
     }
     getCurrentDateTime() {
         const now = new Date();

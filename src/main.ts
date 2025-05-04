@@ -31,27 +31,25 @@ export default class EventLoggerPlugin extends Plugin {
 
     async onload() {
         console.log('Event Logger: Loading plugin');
-
+    
         await this.loadSettings();
-
+    
         this.addSettingTab(new EventLoggerSettingTab(this.app, this));
-
+    
+        // Command to create an event with a file
         this.addCommand({
             id: 'create-event-with-file',
             name: 'Create Event in Journal with File',
-            callback: () => this.showByDate(true)
+            callback: () => this.showByDate(true) // Calls showByDate with createEventFile = true
         });
-
+    
+        // Command to create an event in the journal only
         this.addCommand({
             id: 'open-date-input-modal',
-            name: 'Open Date Input Modal',
-            callback: () => {
-                new DateInputModal(this.app, (data) => {
-                    console.log(data);
-                }, this.settings).open();
-            },
+            name: 'Create Event in Journal',
+            callback: () => this.showJournalOnly() // Calls showJournalOnly
         });
-
+    
         this.injectCSS();
     }
 
@@ -116,22 +114,23 @@ export default class EventLoggerPlugin extends Plugin {
             if (description && inputDate && eventType && icon && startTime && endTime) {
                 const eventTypeObj = this.settings.eventTypes.find(option => option.display === eventType);
                 const prefix = eventTypeObj ? eventTypeObj.prefix : '';
-                const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: [[${moment(inputDate).format('YYYYMMDD')} - ${prefix} -- ${description}|${description}]])`;
+                const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: [[${moment(inputDate).local().format('YYYYMMDD')} - ${prefix ? `${prefix} -- ` : ''}${description}|${description}]])`;
                 await this.addToJournal(inputDate, formattedString);
-
+    
                 if (createEventFile) {
+                    console.log('Event Logger: Creating event file...');
                     await this.createEventFile(inputDate, eventType, description, startTime, endTime, prefix);
                 }
             }
         }, this.settings).open();
     }
-
+    
     async showJournalOnly() {
         await this.loadSettings();
         new JournalOnlyModal(this.app, async ({ description, inputDate, icon, startTime, journalPrefix }) => {
             if (description && inputDate && icon && startTime) {
                 const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: ${description})`;
-                await this.addToJournal(inputDate, formattedString);
+                await this.addToJournal(moment(inputDate).local().format('YYYY-MM-DD'), formattedString);
             }
         }, this.settings).open();
     }
@@ -150,9 +149,12 @@ export default class EventLoggerPlugin extends Plugin {
     }
 
     async createEventFile(inputDate: string, eventType: string, description: string, startTime: string, endTime: string, prefix: string) {
-        const formattedEventDate = moment(inputDate).format(this.settings.eventNameFormat);
-        const eventFileName = `${formattedEventDate} - ${prefix} -- ${description}.md`;
-        const eventFilePath = `${this.settings.eventFolder}/${eventFileName}`;
+        console.log('Event Logger: Starting to create event file...');
+        const year = moment(inputDate).format('YYYY'); // Extract year
+        const yearMonth = moment(inputDate).format('YYYY-MM'); // Extract year and month
+        const eventFileName = `${moment(inputDate).format('YYYYMMDD')} - ${prefix ? `${prefix} -- ` : ''}${description}.md`;
+        const eventFilePath = `${this.settings.eventFolder}/${year}/${yearMonth}/${eventFileName}`; // Correct folder structure
+        const folderPath = eventFilePath.substring(0, eventFilePath.lastIndexOf('/')); // Extract folder path
         const currentDatedTime = this.getCurrentDateTime();
         const eventFileContent = `---\n
 type: ${eventType.toLowerCase().replace(/\s+/g, '').replace(/'/g, '')}\n
@@ -162,15 +164,36 @@ endTime: ${endTime}\n
 date: ${inputDate}\n
 fileClass: Events\n
 created: ${currentDatedTime}\n
-filename: ${moment(inputDate).format('YYYYMMDD')} - ${prefix} -- ${description}\n
+filename: ${moment(inputDate).format('YYYYMMDD')} - ${prefix ? `${prefix} -- ` : ''}${description}\n
 attendees: \n
 place: \n
 documents: \n
 ---\n\n
 # ${moment(inputDate).format('YYYYMMDD')} - ${description}`;
-
-        await this.app.vault.create(eventFilePath, eventFileContent);
-        console.log(`Event Logger: Event file created at: ${eventFilePath}`);
+    
+        // Ensure the folder structure exists
+        await this.createFolderRecursively(folderPath);
+    
+        // Create the file
+        try {
+            await this.app.vault.create(eventFilePath, eventFileContent);
+            console.log(`Event Logger: Event file successfully created at: ${eventFilePath}`);
+        } catch (error) {
+            console.error(`Event Logger: Failed to create event file. Error: ${error instanceof Error ? error.message : error}`);
+        }
+    }
+    
+    async createFolderRecursively(folderPath: string) {
+        const parts = folderPath.split('/');
+        let currentPath = '';
+        for (const part of parts) {
+            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            const folder = this.app.vault.getAbstractFileByPath(currentPath);
+            if (!folder) {
+                console.log(`Event Logger: Creating folder at ${currentPath}`);
+                await this.app.vault.createFolder(currentPath);
+            }
+        }
     }
 
     getCurrentDateTime(): string {
