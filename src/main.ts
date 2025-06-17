@@ -2,6 +2,7 @@ import { Plugin, TFile } from 'obsidian';
 import DateInputModal from './modals/DateInputModal';
 import JournalOnlyModal from './modals/JournalOnlyModal';
 import EventLoggerSettingTab from './settings';
+import { isJotsAssistantAvailable } from './utils/jotsIntegration';
 import moment from 'moment';
 
 export interface EventLoggerSettings {
@@ -132,20 +133,75 @@ export default class EventLoggerPlugin extends Plugin {
         new JournalOnlyModal(this.app, async ({ description, inputDate, icon, startTime, journalPrefix }) => {
             if (description && inputDate && icon && startTime) {
                 const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: ${description})`;
-                await this.addToJournal(moment(inputDate).local().format('YYYY-MM-DD'), formattedString);
+                await this.addToJournal(inputDate, formattedString);
             }
         }, this.settings).open();
     }
 
     async addToJournal(inputDate: string, formattedString: string) {
-        const formattedDate = moment(inputDate).format(this.settings.journalNameFormat);
-        const journalPath = `${this.settings.journalFolder}/${formattedDate}.md`;
-        const journalFile = await this.app.vault.getAbstractFileByPath(journalPath);
+        let journalFolder = this.settings.journalFolder;
+        let formattedDate;
+
+        // Parse the input date to ensure we have a valid moment object
+        const date = moment(inputDate);
+
+        // Use JOTS Assistant settings if available
+        if (isJotsAssistantAvailable()) {
+            const jotsInfo = window.JotsAssistant!.api.getJournalPathInfo();
+            console.debug('JOTS Event Logger: Got journal info from JOTS Assistant:', jotsInfo);
+            journalFolder = jotsInfo.rootFolder;
+
+            // Build the path using the exact format strings from JOTS Assistant
+            const folderPart = date.format(jotsInfo.folderPattern);
+            const fileName = date.format('YYYY-MM-DD_ddd'); // Hard-code this format to ensure correct day abbreviation
+            formattedDate = `${folderPart}/${fileName}`;
+        } else {
+            formattedDate = date.format(this.settings.journalNameFormat);
+        }
+        const journalPath = `${journalFolder}/${formattedDate}.md`;
+        console.debug('JOTS Event Logger: Attempting to access journal at:', {
+            inputDate,
+            journalFolder,
+            formattedDate,
+            fullPath: journalPath
+        });
+
+        // Ensure the folder structure exists
+        const folderPath = journalPath.substring(0, journalPath.lastIndexOf('/'));
+        await this.createFolderRecursively(folderPath);
+
+        // Try to get or create the journal file
+        let journalFile = await this.app.vault.getAbstractFileByPath(journalPath);
+        if (!journalFile) {
+            console.debug('JOTS Event Logger: Creating new journal file at:', journalPath);
+            await this.app.vault.create(journalPath, '');
+            journalFile = await this.app.vault.getAbstractFileByPath(journalPath);
+        }
+
         if (journalFile instanceof TFile) {
             let content = await this.app.vault.read(journalFile);
             content = content.replace(/\n+$/, '');
             const entryString = this.settings.nestJournalEntries ? `> ${formattedString}` : formattedString;
             await this.app.vault.modify(journalFile, content + '\n' + entryString);
+
+            // Call JOTS Assistant to add tracking and refresh headers/footers
+            try {
+                if (isJotsAssistantAvailable()) {
+                    const jotsInfo = window.JotsAssistant!.api.getJournalPathInfo();
+                    // Use the JOTS Assistant's file pattern to format the date
+                    const datePart = moment(inputDate).format(jotsInfo.filePattern);
+                    console.debug('JOTS Event Logger: Adding JOTS to journal:', {
+                        filePath: journalPath,
+                        datePart: datePart,
+                        pattern: jotsInfo.filePattern
+                    });
+                    await window.JotsAssistant!.api.addJotsToJournal(datePart);
+                    // Refresh headers and footers after adding JOTS
+                    await window.JotsAssistant!.api.refreshHeadersAndFooters();
+                }
+            } catch (error) {
+                console.warn('JOTS Event Logger: Failed to add JOTS to journal:', error);
+            }
         } else {
             console.log('Event Logger: Journal file not found.');
         }
