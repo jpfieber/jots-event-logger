@@ -12,6 +12,7 @@ export interface EventLoggerSettings {
     iconOptions: string;
     journalPrefix: string;
     svgUri: string;
+    nestJournalEntries: boolean;
     eventTypes: { display: string; prefix: string; icon: string }[];
 }
 
@@ -23,6 +24,7 @@ const DEFAULT_SETTINGS: EventLoggerSettings = {
     iconOptions: '💼,🚹,🚺,👫,🏈,🎈,💦,📚,📆',
     journalPrefix: 'e',
     svgUri: '',
+    nestJournalEntries: false,
     eventTypes: []
 };
 
@@ -31,25 +33,25 @@ export default class EventLoggerPlugin extends Plugin {
 
     async onload() {
         console.log('Event Logger: Loading plugin');
-    
+
         await this.loadSettings();
-    
+
         this.addSettingTab(new EventLoggerSettingTab(this.app, this));
-    
+
         // Command to create an event with a file
         this.addCommand({
             id: 'create-event-with-file',
             name: 'Create Event in Journal with File',
             callback: () => this.showByDate(true) // Calls showByDate with createEventFile = true
         });
-    
+
         // Command to create an event in the journal only
         this.addCommand({
             id: 'open-date-input-modal',
             name: 'Create Event in Journal',
             callback: () => this.showJournalOnly() // Calls showJournalOnly
         });
-    
+
         this.injectCSS();
     }
 
@@ -116,7 +118,7 @@ export default class EventLoggerPlugin extends Plugin {
                 const prefix = eventTypeObj ? eventTypeObj.prefix : '';
                 const formattedString = `- [${journalPrefix}] (time:: ${startTime}) (type:: ${icon}) (event:: [[${moment(inputDate).local().format('YYYYMMDD')} - ${prefix ? `${prefix} -- ` : ''}${description}|${description}]])`;
                 await this.addToJournal(inputDate, formattedString);
-    
+
                 if (createEventFile) {
                     console.log('Event Logger: Creating event file...');
                     await this.createEventFile(inputDate, eventType, description, startTime, endTime, prefix);
@@ -124,7 +126,7 @@ export default class EventLoggerPlugin extends Plugin {
             }
         }, this.settings).open();
     }
-    
+
     async showJournalOnly() {
         await this.loadSettings();
         new JournalOnlyModal(this.app, async ({ description, inputDate, icon, startTime, journalPrefix }) => {
@@ -142,7 +144,8 @@ export default class EventLoggerPlugin extends Plugin {
         if (journalFile instanceof TFile) {
             let content = await this.app.vault.read(journalFile);
             content = content.replace(/\n+$/, '');
-            await this.app.vault.modify(journalFile, content + '\n' + formattedString);
+            const entryString = this.settings.nestJournalEntries ? `> ${formattedString}` : formattedString;
+            await this.app.vault.modify(journalFile, content + '\n' + entryString);
         } else {
             console.log('Event Logger: Journal file not found.');
         }
@@ -170,10 +173,10 @@ place: \n
 documents: \n
 ---\n\n
 # ${moment(inputDate).format('YYYYMMDD')} - ${description}`;
-    
+
         // Ensure the folder structure exists
         await this.createFolderRecursively(folderPath);
-    
+
         // Create the file
         try {
             await this.app.vault.create(eventFilePath, eventFileContent);
@@ -182,7 +185,7 @@ documents: \n
             console.error(`Event Logger: Failed to create event file. Error: ${error instanceof Error ? error.message : error}`);
         }
     }
-    
+
     async createFolderRecursively(folderPath: string) {
         const parts = folderPath.split('/');
         let currentPath = '';

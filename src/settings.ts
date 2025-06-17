@@ -58,6 +58,19 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
                     });
             });
 
+        // Nest Journal Entries Setting
+        new Setting(containerEl)
+            .setName("Nest Journal Entries in Callout")
+            .setDesc("When enabled, journal entries will be nested as callouts with a '> ' prefix")
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(this.plugin.settings.nestJournalEntries || false)
+                    .onChange(async (value) => {
+                        this.plugin.settings.nestJournalEntries = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
         // Event Name Format Setting
         new Setting(containerEl)
             .setName('Event Name Format')
@@ -201,7 +214,7 @@ export default class EventLoggerSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                         this.display();
                     }));
-           });
+        });
 
         // Add Event Type Button
         new Setting(containerEl)
