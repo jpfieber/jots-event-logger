@@ -1,4 +1,5 @@
 import { Modal } from 'obsidian';
+import moment from 'moment';
 
 export default class JournalOnlyModal extends Modal {
     private onSubmit: (data: { description: string; inputDate: string; icon: string; startTime: string; journalPrefix: string }) => void;
@@ -24,14 +25,21 @@ export default class JournalOnlyModal extends Modal {
         const dateTimeContainer = contentEl.createEl('div');
         dateTimeContainer.addClass('modal-datetime-container');
 
-        const dateContainer = this.createDateTimeContainer(dateTimeContainer, 'Event date', 'date', new Date().toISOString().split('T')[0]);
-        const startTimeContainer = this.createDateTimeContainer(dateTimeContainer, 'Start time', 'time', '00:00');
+        // Date input
+        const dateContainerDiv = dateTimeContainer.createEl('div');
+        dateContainerDiv.addClass('modal-time-container');
+        this.createLabel(dateContainerDiv, 'Event date');
+        const dateInput = dateContainerDiv.createEl('input', { type: 'date' });
+        dateInput.addClass('modal-input');
+        dateInput.value = moment().format('YYYY-MM-DD');
+
+        const startTimeContainer = this.createDateTimeContainer(dateTimeContainer, 'Start time', 'time', moment().startOf('day').format('HH:mm'));
 
         const submitButton = contentEl.createEl('button', { text: 'Submit' });
         submitButton.addClass('modal-button');
         submitButton.onclick = async () => {
             const description = descriptionEl.value;
-            const inputDate = dateContainer.value;
+            const inputDate = dateInput.value;
             const icon = iconEl.value;
             const startTime = startTimeContainer.value;
             const journalPrefix = this.settings.journalPrefix;
